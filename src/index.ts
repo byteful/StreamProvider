@@ -13,7 +13,8 @@ const MAX_WORKERS = 3;
 const queue = new PQueue({ concurrency: MAX_WORKERS });
 
 export const browser = await chromium.launch({
-    headless: false
+    headless: true,
+    args: ['--disable-gpu', '--disable-gl-drawing-for-tests']
 });
 
 app.get('/', async (req: Request, res: Response): Promise<any> => {

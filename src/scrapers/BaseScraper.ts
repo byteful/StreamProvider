@@ -1,11 +1,11 @@
 import { Page } from 'playwright';
-import { browser } from '../index.ts';
+import { context } from '../index.ts';
 
 export abstract class BaseScraper {
     protected page: Page | null = null;
 
     async initialize() {
-        this.page = await browser.newPage();
+        this.page = await context.newPage();
     }
 
     abstract extractStream(imdbId: string, season?: number, episode?: number): Promise<ScraperResult>;

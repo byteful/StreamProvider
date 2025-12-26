@@ -4,7 +4,7 @@ Welcome to yet another **FMHY** related project! This is an API that developers 
 It is publicly hosted, but it may eventually be taken down, so consider hosting your own instance. You will need a PostgreSQL database to store the cached data, or you can modify the index.js file to disable caching. I may add a separate config.json file, but since this is designed for developers, I feel like most can figure it out.
 
 ## How to use
-Public URL: `https://streamprovider.koyeb.app/`
+**Public URL: `https://streamprovider.koyeb.app/`** <br><br>
 Example Usage:
 ```
 TV Show:

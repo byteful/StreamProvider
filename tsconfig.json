@@ -9,7 +9,5 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["frontend", "node_modules"]
+  }
 }

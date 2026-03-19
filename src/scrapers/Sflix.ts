@@ -13,21 +13,26 @@ const SFLIX_STREAM_TIMEOUT_MS = Number(process.env.SFLIX_STREAM_TIMEOUT_MS ?? 12
 const SFLIX_DOM_READY_TIMEOUT_MS = Number(process.env.SFLIX_DOM_READY_TIMEOUT_MS ?? 18000);
 const SFLIX_SELECTION_RETRIES = Number(process.env.SFLIX_SELECTION_RETRIES ?? 2);
 const SFLIX_RETRY_DELAY_MS = Number(process.env.SFLIX_RETRY_DELAY_MS ?? 700);
+const SFLIX_BLOCKED_RESOURCE_TYPES = new Set(['font', 'stylesheet', 'image', 'media']);
 
 export class SflixScraper extends BaseScraper {
     private hasClosedShareModal = false;
+    private networkOptimizationsEnabled = false;
 
     async extractStream(tmdbId: string, season?: number, episode?: number): Promise<ScraperResult> {
+        const metadataPromise = resolveTmdbLookupMetadata(tmdbId, season, episode);
         await this.initialize();
         const page = this.requirePage();
         this.hasClosedShareModal = false;
+        this.networkOptimizationsEnabled = false;
+        await this.enableNetworkOptimizations();
 
-        const metadata = await resolveTmdbLookupMetadata(tmdbId, season, episode);
+        const metadata = await metadataPromise;
         if (metadata.mediaType === 'tv' && (!season || !episode)) {
             throw new Error('TV_REQUIRES_SEASON_EPISODE');
         }
 
-        const searchTitles = [metadata.title, metadata.originalTitle].filter(
+        const searchTitles = [...new Set([metadata.title, metadata.originalTitle])].filter(
             (value): value is string => Boolean(value && value.trim())
         );
         const chosenResult = await this.findBestSearchResult(searchTitles, metadata.releaseYear);
@@ -63,6 +68,7 @@ export class SflixScraper extends BaseScraper {
 
         for (const title of titles) {
             const searchSlug = this.toSearchSlug(title);
+            if (!searchSlug) continue;
             const searchUrl = `${SFLIX_BASE_URL}/search/${searchSlug}`;
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: SFLIX_NAV_TIMEOUT_MS });
 
@@ -235,16 +241,6 @@ export class SflixScraper extends BaseScraper {
         const page = this.requirePage();
         await this.closeShareModalIfPresent();
 
-        await page.route('**/*', async (route) => {
-            const toBlock = ['font', 'stylesheet', 'image', 'media'];
-            
-            if (toBlock.includes(route.request().resourceType())) {
-                await route.abort();
-            } else {
-                await route.continue();
-            }
-        });
-
         const request = await page.waitForRequest(
             (req) => req.url().includes('.m3u8') || req.url().includes('.mp4'),
             { timeout }
@@ -304,5 +300,20 @@ export class SflixScraper extends BaseScraper {
         }
 
         return closed;
+    }
+
+    private async enableNetworkOptimizations(): Promise<void> {
+        if (this.networkOptimizationsEnabled) return;
+        const page = this.requirePage();
+
+        await page.route('**/*', async (route) => {
+            if (SFLIX_BLOCKED_RESOURCE_TYPES.has(route.request().resourceType())) {
+                await route.abort();
+                return;
+            }
+            await route.continue();
+        });
+
+        this.networkOptimizationsEnabled = true;
     }
 }

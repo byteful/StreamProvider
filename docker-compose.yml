@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-streamprovider}
+      POSTGRES_USER: ${POSTGRES_USER:-streamprovider}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-streamprovider_dev_password}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-streamprovider}:${POSTGRES_PASSWORD:-streamprovider_dev_password}@postgres:5432/${POSTGRES_DB:-streamprovider}
+      DATABASE_SSL_MODE: disable
+      TMDB_API_KEY: ${TMDB_API_KEY:?TMDB_API_KEY is required}
+      MAX_WORKERS: ${MAX_WORKERS:-10}
+      CHROME_DATA_DIR: /app/.chrome-data
+    ports:
+      - "3001:3000"
+    volumes:
+      - chrome_data:/app/.chrome-data
+
+volumes:
+  postgres_data:
+  chrome_data:

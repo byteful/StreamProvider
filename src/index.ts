@@ -11,7 +11,7 @@ import { join } from 'path';
 const app = express();
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const MAX_WORKERS = Number(process.env.MAX_WORKERS || 10);
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const CHROME_DATA_DIR = process.env.CHROME_DATA_DIR || join(tmpdir(), 'streamprovider-chrome');

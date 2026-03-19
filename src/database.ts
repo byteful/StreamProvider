@@ -3,9 +3,21 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+    throw new Error('DATABASE_URL is required.');
+}
+
+const databaseSslMode = (process.env.DATABASE_SSL_MODE ?? 'require').toLowerCase();
+const sslConfig = databaseSslMode === 'disable' || databaseSslMode === 'off' || databaseSslMode === 'false'
+    ? undefined
+    : {
+        rejectUnauthorized: databaseSslMode !== 'no-verify',
+    };
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    connectionString: databaseUrl,
+    ssl: sslConfig,
 });
 
 export async function initDatabase(): Promise<void> {

@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
-RUN npx playwright install chromium --with-deps
+RUN npx patchright install chrome --with-deps
 
 COPY . .
 

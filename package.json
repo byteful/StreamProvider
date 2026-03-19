@@ -4,7 +4,8 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "run": "npx tsx src/index.ts"
+    "run": "npx tsx src/index.ts",
+    "test": "npx tsx --test test/**/*.test.ts"
   },
   "keywords": [],
   "author": "byteful",
@@ -13,8 +14,8 @@
   "dependencies": {
     "express": "^5.2.1",
     "p-queue": "^9.0.1",
-    "pg": "^8.16.3",
-    "playwright": "^1.57.0"
+    "patchright": "^1.58.2",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -22,6 +23,7 @@
     "@types/pg": "^8.16.0",
     "dotenv": "^17.2.3",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

@@ -1,9 +1,12 @@
 import express, { type Request, type Response } from 'express';
 import PQueue from 'p-queue';
 import { runScraper } from './scraperManager.ts';
-import { chromium } from 'playwright';
+import { chromium } from 'patchright';
 import { initDatabase } from './database.ts';
 import { runCacheCleanup } from './cacheService.ts';
+import { applyTimingShield } from './stealth.ts';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 const app = express();
 app.use(express.json());
@@ -11,24 +14,36 @@ app.use(express.json());
 const PORT = 3000;
 const MAX_WORKERS = Number(process.env.MAX_WORKERS || 10);
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const CHROME_DATA_DIR = process.env.CHROME_DATA_DIR || join(tmpdir(), 'streamprovider-chrome');
 
 const queue = new PQueue({ concurrency: MAX_WORKERS });
 
-const browser = await chromium.launch({
+export const context = await chromium.launchPersistentContext(CHROME_DATA_DIR, {
+    channel: 'chrome',
     headless: true,
-    args: ['--disable-gpu']
+    viewport: null,
 });
-export const context = await browser.newContext({
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36"
-});
+
+await applyTimingShield(context);
+
+await context.addCookies([{
+    name: 'show_share',
+    value: 'true',
+    domain: 'sflix2.to',
+    path: '/',
+    httpOnly: false,
+    secure: false,
+    sameSite: 'Lax',
+}]);
 
 await initDatabase();
 
 setInterval(async () => {
     try {
         await runCacheCleanup();
-    } catch (error: any) {
-        console.error(`[Cache Cleanup Error] ${error.message}`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[Cache Cleanup Error] ${message}`);
     }
 }, CLEANUP_INTERVAL_MS);
 
@@ -45,25 +60,42 @@ app.get('/', async (req: Request, res: Response): Promise<any> => {
     }
 
     try {
-        const seasonNum = season ? Number(season) : undefined;
-        const episodeNum = episode ? Number(episode) : undefined;
+        const tmdbIdStr = String(tmdbId);
+        const tmdbNumeric = Number(tmdbIdStr);
 
-        const result = await queue.add(async () => {
-            return await runScraper(tmdbId.toString(), seasonNum, episodeNum);
-        }, {
-            priority: 10
-        });
+        if (!Number.isInteger(tmdbNumeric) || tmdbNumeric <= 0) {
+            return res.status(400).json({ error: "tmdbId must be a positive integer." });
+        }
 
+        let seasonNum: number | undefined;
+        if (season !== undefined) {
+            const parsedSeason = Number(season);
+            if (!Number.isInteger(parsedSeason) || parsedSeason <= 0) {
+                return res.status(400).json({ error: "season must be a positive integer." });
+            }
+            seasonNum = parsedSeason;
+        }
+
+        let episodeNum: number | undefined;
+        if (episode !== undefined) {
+            const parsedEpisode = Number(episode);
+            if (!Number.isInteger(parsedEpisode) || parsedEpisode <= 0) {
+                return res.status(400).json({ error: "episode must be a positive integer." });
+            }
+            episodeNum = parsedEpisode;
+        }
+
+        const result = await queue.add(() => runScraper(tmdbIdStr, seasonNum, episodeNum), { priority: 10 });
         return res.json(result);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Internal Server Error';
+        console.error(`[Error] ${message}`);
 
-    } catch (error: any) {
-        console.error(`[Error] ${error.message}`);
-
-        if (error.message.includes('Timeout')) {
+        if (message.includes('Timeout')) {
             return res.status(408).json({ error: "Scraping timed out, no stream found." });
         }
 
-        return res.status(500).json({ error: error.message || "Internal Server Error" });
+        return res.status(500).json({ error: message });
     }
 });
 

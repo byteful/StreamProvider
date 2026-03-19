@@ -4,8 +4,10 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
-RUN npx patchright install chrome --with-deps
+RUN apt-get update && apt-get install -y --no-install-recommends chromium ca-certificates fonts-liberation && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY --chown=node:node . .
+ENV BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
+USER node
 
 CMD ["npx", "tsx", "src/index.ts"]

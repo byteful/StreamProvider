@@ -1,7 +1,7 @@
 import type { BrowserContext } from 'patchright';
 
 /**
- * Patchright + real Chrome (channel: "chrome") handles all fingerprint
+ * Patchright with a real browser engine handles all fingerprint
  * evasion natively: webdriver, plugins, chrome object, stack traces, etc.
  *
  * The only remaining detection vector that survives Patchright is the

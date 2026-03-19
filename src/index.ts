@@ -15,14 +15,23 @@ const PORT = 3000;
 const MAX_WORKERS = Number(process.env.MAX_WORKERS || 10);
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const CHROME_DATA_DIR = process.env.CHROME_DATA_DIR || join(tmpdir(), 'streamprovider-chrome');
+const BROWSER_CHANNEL = process.env.BROWSER_CHANNEL;
+const BROWSER_EXECUTABLE_PATH = process.env.BROWSER_EXECUTABLE_PATH;
 
 const queue = new PQueue({ concurrency: MAX_WORKERS });
 
-export const context = await chromium.launchPersistentContext(CHROME_DATA_DIR, {
-    channel: 'chrome',
+const launchOptions: Parameters<typeof chromium.launchPersistentContext>[1] = {
     headless: true,
     viewport: null,
-});
+};
+
+if (BROWSER_EXECUTABLE_PATH) {
+    launchOptions.executablePath = BROWSER_EXECUTABLE_PATH;
+} else if (BROWSER_CHANNEL) {
+    launchOptions.channel = BROWSER_CHANNEL as 'chromium' | 'chrome' | 'msedge';
+}
+
+export const context = await chromium.launchPersistentContext(CHROME_DATA_DIR, launchOptions);
 
 await applyTimingShield(context);
 

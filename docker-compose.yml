@@ -31,12 +31,9 @@ services:
       DATABASE_SSL_MODE: disable
       TMDB_API_KEY: ${TMDB_API_KEY:?TMDB_API_KEY is required}
       MAX_WORKERS: ${MAX_WORKERS:-10}
-      CHROME_DATA_DIR: /app/.chrome-data
+      CHROME_DATA_DIR: /tmp/streamprovider-chrome
     ports:
       - "3001:3000"
-    volumes:
-      - chrome_data:/app/.chrome-data
 
 volumes:
   postgres_data:
-  chrome_data:

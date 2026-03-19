@@ -1,8 +1,8 @@
 import { pool } from './database.ts';
 import type { ScraperResult } from './scrapers/BaseScraper.ts';
 
-const CACHE_MAX_AGE_DAYS = 7;
-const MAX_CACHE_ROWS = 50000;
+const CACHE_MAX_AGE_DAYS = 30;
+const MAX_CACHE_ROWS = 1_000_000;
 
 export async function getCachedStream(
     tmdbId: string,

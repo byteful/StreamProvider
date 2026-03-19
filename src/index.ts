@@ -5,18 +5,33 @@ import { chromium } from 'patchright';
 import { initDatabase } from './database.ts';
 import { runCacheCleanup } from './cacheService.ts';
 import { applyTimingShield } from './stealth.ts';
+import { resolveNextTvEpisodes } from './tmdbClient.ts';
+import { isQueueOverloaded, scheduleTvPrefetchJobs } from './backgroundPrefetch.ts';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
 const app = express();
 app.use(express.json());
 
+function parsePositiveIntEnv(value: string | undefined, defaultValue: number): number {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
 const PORT = Number(process.env.PORT || 3000);
-const MAX_WORKERS = Number(process.env.MAX_WORKERS || 10);
+const MAX_WORKERS = parsePositiveIntEnv(process.env.MAX_WORKERS, 2);
+const MAX_QUEUE_SIZE = parsePositiveIntEnv(process.env.MAX_QUEUE_SIZE, 25);
+const DIRECT_REQUEST_PRIORITY = parsePositiveIntEnv(process.env.DIRECT_REQUEST_PRIORITY, 10);
+const BACKGROUND_PREFETCH_COUNT = parsePositiveIntEnv(process.env.BACKGROUND_PREFETCH_COUNT, 2);
+const BACKGROUND_JOB_PRIORITY = parsePositiveIntEnv(process.env.BACKGROUND_JOB_PRIORITY, 1);
+const EFFECTIVE_BACKGROUND_PRIORITY = DIRECT_REQUEST_PRIORITY > 1
+    ? Math.min(BACKGROUND_JOB_PRIORITY, DIRECT_REQUEST_PRIORITY - 1)
+    : 1;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const CHROME_DATA_DIR = process.env.CHROME_DATA_DIR || join(tmpdir(), 'streamprovider-chrome');
 const BROWSER_CHANNEL = process.env.BROWSER_CHANNEL;
 const BROWSER_EXECUTABLE_PATH = process.env.BROWSER_EXECUTABLE_PATH;
+const backgroundJobKeys = new Set<string>();
 
 const queue = new PQueue({ concurrency: MAX_WORKERS });
 
@@ -94,7 +109,32 @@ app.get('/', async (req: Request, res: Response): Promise<any> => {
             episodeNum = parsedEpisode;
         }
 
-        const result = await queue.add(() => runScraper(tmdbIdStr, seasonNum, episodeNum), { priority: 10 });
+        if (isQueueOverloaded(queue, MAX_QUEUE_SIZE)) {
+            return res.status(529).json({
+                error: 'Server is currently overloaded. Please retry shortly.'
+            });
+        }
+
+        const result = await queue.add(
+            () => runScraper(tmdbIdStr, seasonNum, episodeNum),
+            { priority: DIRECT_REQUEST_PRIORITY }
+        );
+
+        if (seasonNum !== undefined && episodeNum !== undefined) {
+            void scheduleTvPrefetchJobs({
+                queue,
+                tmdbId: tmdbIdStr,
+                season: seasonNum,
+                episode: episodeNum,
+                prefetchCount: BACKGROUND_PREFETCH_COUNT,
+                maxQueueSize: MAX_QUEUE_SIZE,
+                backgroundPriority: EFFECTIVE_BACKGROUND_PRIORITY,
+                inFlightJobs: backgroundJobKeys,
+                resolveNextEpisodes: resolveNextTvEpisodes,
+                runScrape: runScraper
+            });
+        }
+
         return res.json(result);
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Internal Server Error';

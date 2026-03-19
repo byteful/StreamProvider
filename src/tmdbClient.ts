@@ -14,13 +14,19 @@ type TmdbTvResponse = {
     name?: string;
     original_name?: string;
     first_air_date?: string;
-    seasons?: Array<{ season_number: number; name?: string }>;
+    seasons?: Array<{ season_number: number; name?: string; episode_count?: number }>;
 };
 
 type TmdbEpisodeResponse = {
     id: number;
     episode_number: number;
     name?: string;
+};
+
+type TmdbSeasonResponse = {
+    id: number;
+    season_number: number;
+    episodes?: Array<{ episode_number: number }>;
 };
 
 export type MovieLookupMetadata = {
@@ -52,6 +58,11 @@ export type TvShowLookupMetadata = {
 };
 
 export type LookupMetadata = MovieLookupMetadata | TvEpisodeLookupMetadata | TvShowLookupMetadata;
+
+export type TvEpisodeCursor = {
+    season: number;
+    episode: number;
+};
 
 function getTmdbApiKey(): string {
     const key = process.env.TMDB_API_KEY?.trim();
@@ -216,4 +227,79 @@ export async function resolveTmdbLookupMetadata(
     }
 
     throw new Error('TMDB_NOT_FOUND');
+}
+
+export async function resolveNextTvEpisodes(
+    tmdbId: string,
+    season: number,
+    episode: number,
+    count: number
+): Promise<TvEpisodeCursor[]> {
+    if (!Number.isInteger(season) || season <= 0) {
+        throw new Error('TMDB_INVALID_SEASON');
+    }
+    if (!Number.isInteger(episode) || episode <= 0) {
+        throw new Error('TMDB_INVALID_EPISODE');
+    }
+    if (!Number.isInteger(count) || count <= 0) {
+        return [];
+    }
+
+    const show = await fetchTmdb<TmdbTvResponse>(`/tv/${encodeURIComponent(tmdbId)}`);
+    const seasonNumbers = (show.seasons ?? [])
+        .map((entry) => entry.season_number)
+        .filter((value) => Number.isInteger(value) && value > 0)
+        .sort((a, b) => a - b);
+
+    if (seasonNumbers.length === 0) {
+        throw new Error('TMDB_TV_METADATA_INCOMPLETE');
+    }
+    if (!seasonNumbers.includes(season)) {
+        throw new Error('TMDB_SEASON_NOT_FOUND');
+    }
+
+    const episodesBySeason = new Map<number, number[]>();
+    const fetchSeasonEpisodes = async (seasonNumber: number): Promise<number[]> => {
+        const cached = episodesBySeason.get(seasonNumber);
+        if (cached) {
+            return cached;
+        }
+
+        const seasonData = await fetchTmdb<TmdbSeasonResponse>(
+            `/tv/${encodeURIComponent(tmdbId)}/season/${seasonNumber}`
+        );
+        const numbers = (seasonData.episodes ?? [])
+            .map((entry) => entry.episode_number)
+            .filter((value) => Number.isInteger(value) && value > 0)
+            .sort((a, b) => a - b);
+        episodesBySeason.set(seasonNumber, numbers);
+        return numbers;
+    };
+
+    const currentSeasonEpisodes = await fetchSeasonEpisodes(season);
+    if (!currentSeasonEpisodes.includes(episode)) {
+        throw new Error('TMDB_EPISODE_NOT_FOUND');
+    }
+
+    const results: TvEpisodeCursor[] = [];
+    const seasonStartIdx = seasonNumbers.indexOf(season);
+
+    for (let i = seasonStartIdx; i < seasonNumbers.length && results.length < count; i += 1) {
+        const seasonNumber = seasonNumbers[i];
+        const episodeNumbers = await fetchSeasonEpisodes(seasonNumber);
+        const minEpisodeNumber = seasonNumber === season ? episode + 1 : 1;
+
+        for (const episodeNumber of episodeNumbers) {
+            if (episodeNumber < minEpisodeNumber) {
+                continue;
+            }
+
+            results.push({ season: seasonNumber, episode: episodeNumber });
+            if (results.length >= count) {
+                break;
+            }
+        }
+    }
+
+    return results;
 }

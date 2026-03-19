@@ -30,7 +30,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-streamprovider}:${POSTGRES_PASSWORD:-streamprovider_dev_password}@postgres:5432/${POSTGRES_DB:-streamprovider}
       DATABASE_SSL_MODE: disable
       TMDB_API_KEY: ${TMDB_API_KEY:?TMDB_API_KEY is required}
-      MAX_WORKERS: ${MAX_WORKERS:-10}
+      MAX_WORKERS: ${MAX_WORKERS:-2}
+      MAX_QUEUE_SIZE: ${MAX_QUEUE_SIZE:-25}
+      BACKGROUND_PREFETCH_COUNT: ${BACKGROUND_PREFETCH_COUNT:-2}
+      BACKGROUND_JOB_PRIORITY: ${BACKGROUND_JOB_PRIORITY:-1}
       CHROME_DATA_DIR: /tmp/streamprovider-chrome
     ports:
       - "3001:3000"
